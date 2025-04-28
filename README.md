@@ -21,8 +21,16 @@ Preserves video quality by copying video streams, speeds up reprocessing with ca
 
 ## 📋 Requirements
 
-- [ffmpeg](https://ffmpeg.org/) installed
 - Bash (Linux, WSL, or macOS Terminal)
+
+Tool | Why it's needed | Install with
+| --- | --- | --- |
+ffmpeg | Audio analysis + normalization | sudo apt install ffmpeg
+bc | Decimal math for averaging and comparisons | sudo apt install bc
+awk | Text processing and float math (built-in) | Usually preinstalled
+grep | Extract values from ffmpeg output | Usually preinstalled
+xargs | Trim whitespace from values | Usually preinstalled
+find | Recursively locate .mkv files | Usually preinstalled
 
 ---
 
