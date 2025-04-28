@@ -1,36 +1,39 @@
 # 📼 Normalize Audio Loudness Across Video Files
 
-Batch normalize audio loudness across .mkv videos using FFmpeg and Bash.
-Preserves video quality by copying the video stream, adjusts only files that are too loud or too quiet, and speeds up reprocessing with cached loudness metadata.
+Batch normalize audio loudness across `.mkv`, `.mp4`, `.mov`, and `.avi` videos using **FFmpeg** and **Bash**.  
+Preserves video quality by copying video streams, speeds up reprocessing with cached loudness metadata, and uses parallelization to speed up processing.
+
+---
 
 ## ✨ Features
 
-   - Analyze audio loudness (input_i) without re-encoding video
+- Analyze audio loudness (`input_i`) without re-encoding video
+- Cache analysis results to `.loudnorm.json` files
+- Normalize only files significantly louder or quieter than average
+- Skip already normalized files automatically
+- Fully parallelize both analysis and normalization
+- Control the number of concurrent processes with `--threads`
+- Force fresh analysis and normalization with `--reanalyze`
+- Skip confirmation prompts with `-y`
+- Easy to support more media formats by editing a list
 
-   - Cache analysis results to .loudnorm.json files
-
-   - Normalize only files significantly louder or quieter than average
-
-   - Skip already normalized files automatically
-
-   - --reanalyze option to force reanalysis and normalization
-
-   - Interactive prompt showing which files will be processed
-
-   - Simple, portable Bash script
+---
 
 ## 📋 Requirements
 
-   - ffmpeg installed
+- [ffmpeg](https://ffmpeg.org/) installed
+- Bash (Linux, WSL, or macOS Terminal)
 
-   - Bash (Linux, WSL, or macOS terminal)
+---
 
 ## 🚀 Usage
+
 Clone the repo and run:
 
-``` bash 
+```bash
 chmod +x norm.sh
 ./norm.sh
+
 ```
 
 To force reanalyze and renormalize all files:
@@ -39,25 +42,44 @@ To force reanalyze and renormalize all files:
 ./norm.sh --reanalyze
 ```
 
+Optional Flags
+
+   - --threads N — Process up to N files at the same time (default: 1)
+   - --reanalyze — Force fresh analysis even if .loudnorm.json exists
+   - -y or --yes — Skip confirmation after analysis
+
+```bash
+./norm.sh --threads 8 -y
+```
+```bash
+./norm.sh --threads 4
+```
+```bash
+./norm.sh --reanalyze --threads 6
+```
+```bash
+./norm.sh --threads 8 -y
+```
+
 ## 🔍 How It Works
 
-   1. Scan all .mkv files one level deep (e.g., inside Season 1/, Season 2/)
-
-   2. Analyze loudness or load cached .loudnorm.json metadata
-
-   3. Calculate the average loudness across all files
-
-   4. Classify episodes into:
-
+   1. **Scan** all .mkv files one level deep (e.g., inside ```Season 1/```, ```Season 2/```)
+   2. **Analyze** loudness or load cached ```.loudnorm.json``` metadata
+   3. **Calculate** the average loudness across all files
+   4. **Classify** episodes into:
        - Average (no change needed)
-
        - Loud (normalize down)
-
        - Quiet (normalize up)
+   5. **Prompt** you to continue before making changes (or auto-confirm with ```-y```).
+   6. **Normalize** audio without touching video encoding
 
-   5. Prompt you to continue before making changes
+## 📂 Supported Media Types
 
-   6. Normalize audio without touching video encoding
+You can easily adjust supported media types by editing this list in the script:
+```
+ALLOWED_EXTENSIONS=("mkv" "mp4" "mov" "avi")
+```
+Add more formats like ```webm```, ```flv```, etc. if needed.
 
 ## 🗃️ Example Output
 
@@ -103,10 +125,10 @@ Metadata example:
 ```
 
 If the metadata exists and indicates the file is already normalized, the script skips it (unless you use --reanalyze).
-🛡️ License
+### 🛡️ License
 
 This project is licensed under the MIT License.
-💬 Acknowledgements
+### 💬 Acknowledgements
 
    1 FFmpeg Project
 
