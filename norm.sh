@@ -1,16 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-# Optional flags to re-analyze and re-normalize all files, specify number of threads, or auto-confirm
-# Defaults
+# Optional flags
 REANALYZE=false
 THREADS=1
 CONFIRM=false
+SEARCH_PATH="."
 
-# Allowed media file extensions (space-separated, without dot)
+# Allowed media file extensions (space-separated, no dot)
 ALLOWED_EXTENSIONS=("mkv" "mp4" "mov" "avi")
 
-# Parse args
+# Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
     --reanalyze)
@@ -25,6 +25,10 @@ while [[ $# -gt 0 ]]; do
       CONFIRM=true
       shift
       ;;
+    -p|--path)
+      SEARCH_PATH="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -35,23 +39,31 @@ done
 # Declare associative array for file:loudness mapping
 declare -A loudness_map
 
-echo "🔍 Scanning all MKVs..."
-# Build the find command dynamically based on allowed extensions
+echo "🔍 Scanning media files under '$SEARCH_PATH'"
+
+# Build find condition dynamically
 FIND_CONDITION=""
 for ext in "${ALLOWED_EXTENSIONS[@]}"; do
-  FIND_CONDITION+=" -iname '*.${ext}' -o"
+  FIND_CONDITION+="\\( -iname '*.${ext}' ! -iname '*.loudnorm.json' \\) -o "
 done
-# Remove trailing '-o'
-FIND_CONDITION=${FIND_CONDITION::-2}
+FIND_CONDITION=${FIND_CONDITION::-4}
 
-# Find all media files based on allowed extensions
-mapfile -t media_files < <(find . -mindepth 2 -maxdepth 2 \( $FIND_CONDITION \))
+# Correct find structure
+echo "DEBUG: Running find command:"
+echo "find "$SEARCH_PATH" \( -type f -a \( $FIND_CONDITION \) \) -print0"
+
+mapfile -d '' -t media_files < <(find "$SEARCH_PATH" \( -type f -a \( $FIND_CONDITION \) \) -print0)
+
+if [[ ${#media_files[@]} -eq 0 ]]; then
+  echo "❌ No media files found to process."
+  exit 1
+fi
 
 echo "📈 Starting parallel loudness analysis with $THREADS thread(s)..."
 
 # Parallel analysis
 pids=()
-for file in "${mkv_files[@]}"; do
+for file in "${media_files[@]}"; do
   (
     meta_file="${file}.loudnorm.json"
     if [[ "$REANALYZE" == false && -f "$meta_file" ]]; then
@@ -61,18 +73,7 @@ for file in "${mkv_files[@]}"; do
       stats=$(ffmpeg -hide_banner -loglevel error -i "$file" -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null - 2>&1)
       echo "$stats" | sed '$ s/}$/,\n  "normalized": false\n}/' > "$meta_file"
     fi
-
-    # Extract input_i from metadata
-    stats=$(<"$meta_file")
-    iI=$(echo "$stats" | awk -F': ' '/"input_i"/ { gsub(/[",]/, "", $2); print $2 }')
-
-    if [[ -n "$iI" && "$iI" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-      loudness_map["$file"]="$iI"
-    else
-      echo "❌ Could not parse input_i for $file"
-    fi
   ) &
-
   pids+=($!)
 
   if (( ${#pids[@]} >= THREADS )); then
@@ -82,6 +83,23 @@ for file in "${mkv_files[@]}"; do
 done
 wait
 
+# Build loudness map
+for file in "${media_files[@]}"; do
+  meta_file="${file}.loudnorm.json"
+  if [[ -f "$meta_file" ]]; then
+    stats=$(<"$meta_file")
+    iI=$(echo "$stats" | awk -F': ' '/"input_i"/ { gsub(/[",]/, "", $2); print $2 }')
+
+    if [[ -n "$iI" && "$iI" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+      loudness_map["$file"]="$iI"
+    else
+      echo "❌ Could not parse input_i for $file"
+    fi
+  else
+    echo "⚠️ Warning: Missing metadata for $file"
+  fi
+done
+
 # Calculate average loudness
 sum=0
 count=0
@@ -90,12 +108,12 @@ for i in "${loudness_map[@]}"; do
   count=$((count + 1))
 done
 
-avg=$(echo "scale=2; $sum / $count" | bc)
-
-if ! [[ "$avg" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "❌ Average loudness calculation failed (invalid value: '$avg')."
+if [[ "$count" -eq 0 ]]; then
+  echo "❌ No valid loudness data found. Exiting."
   exit 1
 fi
+
+avg=$(echo "scale=2; $sum / $count" | bc)
 
 echo -e "\n📊 Average loudness across files: $avg LUFS\n"
 printf "| %-80s | %8s |\n" "File Path" "Loudness"
@@ -149,7 +167,9 @@ else
   echo "✅ Auto-confirm enabled. Proceeding..."
 fi
 
-# Normalize in parallel
+# Parallel normalization
+echo "🔧 Starting parallel normalization with $THREADS thread(s)..."
+
 pids=()
 for file in "${!loudness_map[@]}"; do
   (
@@ -161,14 +181,12 @@ for file in "${!loudness_map[@]}"; do
       exit 0
     fi
 
-    # Skip already normalized unless reanalyze
     if [[ "$REANALYZE" == false ]] && grep -q '"normalized": true' "${file}.loudnorm.json"; then
       echo "✅ Already normalized: $file — skipping"
       exit 0
     fi
 
     echo "🔧 Normalizing $file (diff = $diff LUFS)"
-
     stats=$(<"${file}.loudnorm.json")
     iTP=$(echo "$stats" | grep '"input_tp"' | sed -E 's/.*:\s*"(-?[0-9.]+)".*/\1/')
     iLRA=$(echo "$stats" | grep '"input_lra"' | sed -E 's/.*:\s*"(-?[0-9.]+)".*/\1/')
@@ -187,7 +205,6 @@ for file in "${!loudness_map[@]}"; do
       echo "❌ Normalization failed for $file"
     fi
   ) &
-
   pids+=($!)
 
   if (( ${#pids[@]} >= THREADS )); then
