@@ -1,27 +1,20 @@
-# 📼 Normalize Audio Loudness Across Video Files
+# Normalize-Audio
 
-Batch normalize audio loudness across `.mkv`, `.mp4`, `.mov`, and `.avi` videos using **FFmpeg** and **Bash**.  
-Preserves video quality by copying video streams, speeds up reprocessing with cached loudness metadata, and uses parallelization to speed up processing.
+Normalize the volume of `.mkv`, `.mp4`, `.mov`, or `.avi` files using `ffmpeg`'s `loudnorm` filter. Great for watching shows without constantly adjusting the volume.Preserves video quality by copying video streams, speeds up reprocessing with cached loudness metadata, and uses parallelization to speed up processing.
 
----
+## Features
 
-## ✨ Features
+- 🔍 Recursively finds all supported media files under a given path
+- 📈 Runs a loudness analysis pass on each media file (`input_i`)
+- 📝 Cache analysis results to `.loudnorm.json` files
+- 🧮 Calculates the average integrated loudness (LUFS) 
+- 🧘‍♂️ Only normalizes files that differ by more than 1 LUFS
+- ⚡ Runs analysis and normalization in parallel using `--threads`
+- 🧠 Saves per-file JSON metadata to skip re-analysis unless `--reanalyze` is specified
+- 📁 Supports complex folder structures (e.g., Season folders)
+- ✅ CLI flags for customization and automation
 
-- Analyze audio loudness (`input_i`) without re-encoding video
-- Cache analysis results to `.loudnorm.json` files
-- Normalize only files significantly louder or quieter than average
-- Skip already normalized files automatically
-- Fully parallelize both analysis and normalization
-- Control the number of concurrent processes with `--threads`
-- Force fresh analysis and normalization with `--reanalyze`
-- Skip confirmation prompts with `-y`
-- Easy to support more media formats by editing a list
-
----
-
-## 📋 Requirements
-
-- Bash (Linux, WSL, or macOS Terminal)
+## Requirements
 
 Tool | Why it's needed | Install with
 | --- | --- | --- |
@@ -32,62 +25,46 @@ grep | Extract values from ffmpeg output | Usually preinstalled
 xargs | Trim whitespace from values | Usually preinstalled
 find | Recursively locate .mkv files | Usually preinstalled
 
----
-
-## 🚀 Usage
-
 Clone the repo and run:
 
 ```bash
 chmod +x norm.sh
 ./norm.sh
 
-```
-
-To force reanalyze and renormalize all files:
-
-```bash 
-./norm.sh --reanalyze
-```
-
-Optional Flags
-
-   - --threads N — Process up to N files at the same time (default: 1)
-   - --reanalyze — Force fresh analysis even if .loudnorm.json exists
-   - -y or --yes — Skip confirmation after analysis
+## Usage
 
 ```bash
-./norm.sh --threads 8 -y
+./norm.sh [options]
 ```
+
+### Options
+
+| Flag            | Description                                                                |
+|------------------|----------------------------------------------------------------------------|
+| `-p <path>`      | Path to start scanning (default: `.`)                                      |
+| `--threads <n>`  | Number of files to process in parallel (default: `1`)                      |
+| `--reanalyze`    | Re-analyze loudness even if JSON metadata is present                       |
+| `-y` or `--yes`  | Skip confirmation prompt before normalization                              |
+
+### Example
+
 ```bash
-./norm.sh --threads 4
-```
-```bash
-./norm.sh --reanalyze --threads 6
-```
-```bash
-./norm.sh --threads 8 -y
+./norm.sh -p "/mnt/media/SHOW" --threads 4 --reanalyze -y
 ```
 
-## 🔍 How It Works
+This will scan the following structure:
 
-   1. **Scan** all .mkv files one level deep (e.g., inside ```Season 1/```, ```Season 2/```)
-   2. **Analyze** loudness or load cached ```.loudnorm.json``` metadata
-   3. **Calculate** the average loudness across all files
-   4. **Classify** episodes into:
-       - Average (no change needed)
-       - Loud (normalize down)
-       - Quiet (normalize up)
-   5. **Prompt** you to continue before making changes (or auto-confirm with ```-y```).
-   6. **Normalize** audio without touching video encoding
-
-## 📂 Supported Media Types
-
-You can easily adjust supported media types by editing this list in the script:
 ```
-ALLOWED_EXTENSIONS=("mkv" "mp4" "mov" "avi")
+SHOW/
+├── Season 1/
+│   ├── SHOW - S01E01 - EPISODE.mkv
+│   └── SHOW - S01E02 - EPISODE.mkv
+├── Season 2/
+│   ├── SHOW - S02E01 - EPISODE.mkv
+│   └── ...
 ```
-Add more formats like ```webm```, ```flv```, etc. if needed.
+
+It recursively scans all subdirectories under the specified path to find valid media files (e.g., inside Season folders).
 
 ## 🗃️ Example Output
 
@@ -132,12 +109,27 @@ Metadata example:
 }
 ```
 
-If the metadata exists and indicates the file is already normalized, the script skips it (unless you use --reanalyze).
-### 🛡️ License
+## How It Works
 
-This project is licensed under the MIT License.
+1. Finds all files matching allowed extensions (excluding `.loudnorm.json`)
+2. Uses `ffmpeg` with `loudnorm` to analyze volume, outputting JSON
+3. Caches results in `filename.mkv.loudnorm.json`
+4. Calculates average LUFS across all files
+5. Normalizes only those with >1 LUFS deviation
+6. Writes new `-matched.mkv` output file next to original
+7. Marks normalized files in metadata
+
+## Version
+
+**v1.0.0**
+
+---
+
+Licensed under MIT. Contributions welcome!
+
 ### 💬 Acknowledgements
 
    1 FFmpeg Project
 
    2 Inspiration from struggling to fall asleep to shows without constant remote volume adjustment. 📺
+
