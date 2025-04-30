@@ -1,4 +1,19 @@
 #!/bin/bash
+#
+# norm.sh — Normalize the loudness of media files using ffmpeg's loudnorm filter.
+#
+# Author: Conor Klecker (@r0n0c)
+# GitHub: https://github.com/r0n0c/Normalize-Audio
+# Version: 1.0.0
+# License: MIT
+# Created: 2024-04-30
+# Updated: 2024-04-30
+#
+# This script scans a directory for .mkv, .mp4, .mov, and .avi files,
+# analyzes their integrated loudness (LUFS), calculates the average,
+# and normalizes files that are too loud or too quiet.
+#
+# Run ./norm.sh --help for usage.
 set -euo pipefail
 
 # Optional flags
